@@ -1,46 +1,111 @@
-# Getting Started with Create React App
+# Recipe Finder
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Веб-приложение для поиска рецептов на русском языке с планировщиком питания и экспортом в PDF.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## Стек
 
-### `npm start`
+| Слой | Технологии |
+|------|-----------|
+| Фреймворк | React 18, Create React App, TypeScript |
+| Маршрутизация | React Router v6 (URL-синхронизированное состояние) |
+| Стили | CSS Custom Properties, Inter + Fraunces (Google Fonts) |
+| API рецептов | Spoonacular REST API |
+| Перевод | Google Translate (неофициальный клиент `gtx`) |
+| PDF | `window.print()` + `@media print` CSS |
+| Хранение | `localStorage` (план питания, кэш API), `sessionStorage` (кэш переводов) |
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+---
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## Реализованный функционал
 
-### `npm test`
+### Поиск рецептов
+- Поиск на **русском языке** — запрос автоматически переводится EN→RU перед отправкой в Spoonacular
+- Названия карточек переводятся обратно RU→EN и отображаются на русском
+- **Дебаунс** 500 мс, чтобы не спамить API при наборе
+- Фильтрация по диете и кухне с **множественным выбором** — кастомный `DropdownMultiSelect`
+- Состояние поиска и фильтров синхронизировано с URL (`?q=паста&diet=vegan`) — ссылки работают и сохраняются в истории браузера
+- Скелетон-анимация во время загрузки
+- Пагинация (12 рецептов на страницу)
+- Кэш API ответов в `localStorage` с TTL 6 часов — экономия лимита 150 запросов/день
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
 
-### `npm run build`
+### Экспорт в PDF
+- Кнопка «Скачать PDF» открывает страницу **предпросмотра** (`/pdf-preview`)
+- На странице последовательно выполняется:
+  1. Загрузка полных данных всех уникальных рецептов из плана через Spoonacular API
+  2. Перевод всех названий, ингредиентов и шагов на русский язык
+  3. Загрузка фотографий как **blob URL** (решает проблему CORS при печати)
+- Итоговый документ:
+  - **Страница 1** — сводная таблица плана питания с названиями блюд и временем
+  - **Страницы 2+** — по одной странице на каждый уникальный рецепт: фото, ингредиенты, нумерованные шаги
+- Нажатие «Сохранить PDF» вызывает `window.print()` — браузер рендерит документ нативно, кириллица и изображения отображаются корректно
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Архитектура
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```
+src/
+├── api/
+│   ├── spoonacular.ts      # Запросы к Spoonacular + localStorage кэш
+│   └── translate.ts        # Google Translate gtx + sessionStorage кэш
+├── components/
+│   ├── Navbar.tsx
+│   ├── RecipeCard.tsx       # Variant B — оверлей + пилюля времени
+│   ├── Filters.tsx
+│   ├── DropdownMultiSelect.tsx  # Кастомный мультиселект
+│   ├── AddToMealPlanModal.tsx   # Сетка 7×3
+│   └── Pagination.tsx
+├── hooks/
+│   ├── useRecipes.ts       # Поиск + URL-синхронизация + перевод заголовков
+│   ├── useMealPlan.ts      # CRUD плана питания + localStorage
+│   └── useDebounce.ts
+├── pages/
+│   ├── SearchPage.tsx
+│   ├── RecipePage.tsx      # 2-кол. макет + перевод ингредиентов/шагов
+│   ├── MealPlanPage.tsx    # Таблица 7×3
+│   └── PdfPreviewPage.tsx  # Предпросмотр + экспорт PDF
+├── types/
+│   └── index.ts            # Recipe, MealPlanDay, MealType
+├── utils/
+│   ├── exportPDF.ts        # window.print()
+│   └── i18n.ts             # Словари диет и кухонь RU
+└── index.css               # Дизайн-система (CSS Custom Properties)
+```
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+## Дизайн-система
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+| Токен | Значение |
+|-------|---------|
+| `--bg` | `#f5f2ec` — тёплый бежевый фон |
+| `--surface` | `#fafaf7` — поверхность карточек |
+| `--accent-breakfast` | `#c7a14a` — золотой (завтрак) |
+| `--accent-lunch` | `#5a7d4f` — зелёный (обед) |
+| `--accent-dinner` | `#3b5a8a` — синий (ужин) |
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+Основной шрифт — **Inter**, заголовки рецептов — **Fraunces** (оптическая засечка).
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+---
 
-## Learn More
+## Запуск
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```bash
+# Установка зависимостей
+npm install
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+# Добавить ключ Spoonacular в .env
+echo "REACT_APP_SPOONACULAR_API_KEY=ваш_ключ" >> .env
+echo "REACT_APP_SPOONACULAR_BASE_URL=https://api.spoonacular.com" >> .env
+
+# Запуск в режиме разработки
+npm start
+
+# Сборка для продакшна
+npm run build
+```
+
+Получить бесплатный API ключ: [spoonacular.com/food-api](https://spoonacular.com/food-api) (150 запросов/день, результаты кэшируются на 6 часов).

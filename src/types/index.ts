@@ -47,10 +47,17 @@ export interface SearchParams {
   page?: number;
 }
 
+export type MealType = 'breakfast' | 'lunch' | 'dinner';
+
 export interface MealPlanDay {
   id: string;
   label: string;
-  recipes: Recipe[];
+  short: string;
+  meals: {
+    breakfast: Recipe[];
+    lunch: Recipe[];
+    dinner: Recipe[];
+  };
 }
 
 export type Diet =

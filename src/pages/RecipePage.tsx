@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { getRecipeById } from '../api/spoonacular';
 import { enToRu } from '../api/translate';
 import { useMealPlan } from '../hooks/useMealPlan';
 import { AddToMealPlanModal } from '../components/AddToMealPlanModal';
-import { Recipe } from '../types';
+import { Recipe, MealType } from '../types';
 import { translateDiet, translateCuisine } from '../utils/i18n';
 
 interface TranslatedData {
@@ -22,6 +22,7 @@ export function RecipePage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  const navigate = useNavigate();
   const { days, addRecipe } = useMealPlan();
 
   useEffect(() => {
@@ -34,7 +35,6 @@ export function RecipePage() {
         setRecipe(data);
         setIsLoading(false);
 
-        // Translate in parallel
         setIsTranslating(true);
         const ingredientTexts = (data.extendedIngredients ?? []).map((i) => i.original);
         const stepTexts = (data.analyzedInstructions?.[0]?.steps ?? []).map((s) => s.step);
@@ -45,11 +45,7 @@ export function RecipePage() {
           enToRu(stepTexts),
         ]);
 
-        setTranslated({
-          title: titleArr[0],
-          ingredients: ingredientsArr,
-          steps: stepsArr,
-        });
+        setTranslated({ title: titleArr[0], ingredients: ingredientsArr, steps: stepsArr });
         setIsTranslating(false);
       })
       .catch((err: Error) => {
@@ -76,11 +72,15 @@ export function RecipePage() {
   return (
     <>
       <main className="recipe-page" style={{ viewTransitionName: `recipe-${recipe.id}` }}>
-        <Link to="/search" className="recipe-page__back">← Назад</Link>
+        <button className="recipe-page__back" onClick={() => navigate(-1)}>← Назад</button>
 
         <div className="recipe-page__hero">
-          <img src={recipe.image} alt={displayTitle} />
           <div className="recipe-page__meta">
+            {recipe.cuisines && recipe.cuisines.length > 0 && (
+              <div className="recipe-page__eyebrow">
+                {recipe.cuisines.map(translateCuisine).join(', ')}
+              </div>
+            )}
             <h1>{displayTitle}</h1>
             <div className="recipe-page__badges">
               {recipe.readyInMinutes && (
@@ -93,49 +93,55 @@ export function RecipePage() {
             {recipe.diets && recipe.diets.length > 0 && (
               <p className="recipe-page__diets">{recipe.diets.map(translateDiet).join(' · ')}</p>
             )}
-            {recipe.cuisines && recipe.cuisines.length > 0 && (
-              <p className="recipe-page__cuisines">Кухня: {recipe.cuisines.map(translateCuisine).join(', ')}</p>
-            )}
+            {isTranslating && <p className="translating-notice">Переводим рецепт...</p>}
             <button className="recipe-page__add-btn" onClick={() => setShowModal(true)}>
               + Добавить в план питания
             </button>
           </div>
+          <img
+            className="recipe-page__hero-img"
+            src={recipe.image}
+            alt={displayTitle}
+          />
         </div>
 
-        {isTranslating && <p className="translating-notice">Переводим рецепт...</p>}
+        <div className="rp-cols">
+          {recipe.extendedIngredients && recipe.extendedIngredients.length > 0 && (
+            <section className="recipe-page__section">
+              <h2>Ингредиенты</h2>
+              <ul className="ingredient-list">
+                {recipe.extendedIngredients.map((ing, i) => (
+                  <li key={ing.id}>
+                    {translated ? translated.ingredients[i] : ing.original}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-        {recipe.extendedIngredients && recipe.extendedIngredients.length > 0 && (
-          <section className="recipe-page__section">
-            <h2>Ингредиенты</h2>
-            <ul className="ingredient-list">
-              {recipe.extendedIngredients.map((ing, i) => (
-                <li key={ing.id}>
-                  {translated ? translated.ingredients[i] : ing.original}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {recipe.analyzedInstructions && recipe.analyzedInstructions.length > 0 && (
-          <section className="recipe-page__section">
-            <h2>Приготовление</h2>
-            <ol className="step-list">
-              {recipe.analyzedInstructions[0].steps.map((step, i) => (
-                <li key={step.number}>
-                  {translated ? translated.steps[i] : step.step}
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
+          {recipe.analyzedInstructions && recipe.analyzedInstructions.length > 0 && (
+            <section className="recipe-page__section">
+              <h2>Приготовление</h2>
+              <ol className="step-list">
+                {recipe.analyzedInstructions[0].steps.map((step, i) => (
+                  <li key={step.number}>
+                    <span className="step-num">{step.number}</span>
+                    <p>{translated ? translated.steps[i] : step.step}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </div>
       </main>
 
       {showModal && (
         <AddToMealPlanModal
           recipe={{ ...recipe, title: displayTitle }}
           days={days}
-          onAdd={(dayId) => addRecipe(dayId, { ...recipe, title: displayTitle })}
+          onAdd={(dayId: string, mealType: MealType) =>
+            addRecipe(dayId, mealType, { ...recipe, title: displayTitle })
+          }
           onClose={() => setShowModal(false)}
         />
       )}

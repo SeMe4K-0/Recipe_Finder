@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useRecipes } from '../hooks/useRecipes';
 import { useMealPlan } from '../hooks/useMealPlan';
 import { RecipeCard } from '../components/RecipeCard';
 import { Filters } from '../components/Filters';
 import { Pagination } from '../components/Pagination';
 import { AddToMealPlanModal } from '../components/AddToMealPlanModal';
-import { Recipe } from '../types';
+import { Recipe, MealType } from '../types';
 
 export function SearchPage() {
   const {
@@ -41,6 +41,9 @@ export function SearchPage() {
             onDietsChange={setDiets}
             onCuisinesChange={setCuisines}
           />
+          {!isLoading && recipes.length > 0 && (
+            <span className="search-page__count">{totalResults} рецептов</span>
+          )}
         </div>
 
         {isLoading && (
@@ -68,14 +71,15 @@ export function SearchPage() {
 
         {!isLoading && recipes.length > 0 && (
           <>
-            <p className="search-page__count">Найдено: {totalResults}</p>
             <div className="recipe-grid">
               {recipes.map((r) => (
                 <RecipeCard
                   key={r.id}
                   recipe={r}
                   translatedTitle={translatedTitles[r.id]}
-                  onAddToMealPlan={setModalRecipe}
+                  onAddToMealPlan={(recipe) =>
+                    setModalRecipe({ ...recipe, title: translatedTitles[recipe.id] ?? recipe.title })
+                  }
                 />
               ))}
             </div>
@@ -88,7 +92,9 @@ export function SearchPage() {
         <AddToMealPlanModal
           recipe={modalRecipe}
           days={days}
-          onAdd={(dayId) => addRecipe(dayId, modalRecipe)}
+          onAdd={(dayId: string, mealType: MealType) =>
+            addRecipe(dayId, mealType, modalRecipe)
+          }
           onClose={() => setModalRecipe(null)}
         />
       )}

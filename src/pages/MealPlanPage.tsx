@@ -1,68 +1,33 @@
-import React, { useState } from 'react';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMealPlan } from '../hooks/useMealPlan';
-import { MealDayColumn } from '../components/MealDayColumn';
-import { exportMealPlanPDF } from '../utils/exportPDF';
-import { Recipe } from '../types';
+import { MealType } from '../types';
+
+const MEAL_TYPES: { type: MealType; label: string }[] = [
+  { type: 'breakfast', label: 'Завтрак' },
+  { type: 'lunch',     label: 'Обед'    },
+  { type: 'dinner',    label: 'Ужин'    },
+];
 
 export function MealPlanPage() {
-  const { days, removeRecipe, moveRecipe } = useMealPlan();
-  const [activeRecipe, setActiveRecipe] = useState<Recipe | null>(null);
-  const [activeDayId, setActiveDayId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { days, removeRecipe } = useMealPlan();
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-  const hasAnyRecipe = days.some((d) => d.recipes.length > 0);
-
-  function handleDragStart(event: DragStartEvent) {
-    const [dayId, recipeId] = String(event.active.id).split(':');
-    const day = days.find((d) => d.id === dayId);
-    const recipe = day?.recipes.find((r) => r.id === Number(recipeId));
-    if (recipe) {
-      setActiveRecipe(recipe);
-      setActiveDayId(dayId);
-    }
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { over } = event;
-    if (!over || !activeRecipe || !activeDayId) {
-      setActiveRecipe(null);
-      setActiveDayId(null);
-      return;
-    }
-    const toDayId = String(over.id).split(':')[0];
-    if (toDayId !== activeDayId) {
-      moveRecipe(activeDayId, toDayId, activeRecipe);
-    }
-    setActiveRecipe(null);
-    setActiveDayId(null);
-  }
+  const hasAnyRecipe = days.some((d) =>
+    (['breakfast', 'lunch', 'dinner'] as MealType[]).some((mt) => d.meals[mt].length > 0)
+  );
 
   return (
     <main className="meal-plan-page">
       <div className="meal-plan-page__header">
-        <div>
-          <h1 className="meal-plan-page__title">План питания</h1>
-          <p className="meal-plan-page__hint">
-            Добавляйте рецепты через поиск, перетаскивайте между днями
-          </p>
-        </div>
+        <h1 className="meal-plan-page__title">План питания</h1>
         <button
           className="pdf-btn"
           disabled={!hasAnyRecipe}
-          onClick={() => exportMealPlanPDF(days)}
+          onClick={() => navigate('/pdf-preview')}
           title={hasAnyRecipe ? 'Скачать план в PDF' : 'Добавьте рецепты в план'}
         >
-          <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+          <svg viewBox="0 0 20 20" fill="none" width="15" height="15">
             <path d="M10 3v9m0 0l-3-3m3 3l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M3 14v1a2 2 0 002 2h10a2 2 0 002-2v-1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
           </svg>
@@ -70,21 +35,50 @@ export function MealPlanPage() {
         </button>
       </div>
 
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="meal-plan-grid">
-          {days.map((day) => (
-            <MealDayColumn key={day.id} day={day} onRemove={removeRecipe} />
-          ))}
-        </div>
-        <DragOverlay>
-          {activeRecipe && (
-            <div className="sortable-recipe-item sortable-recipe-item--overlay">
-              <img src={activeRecipe.image} alt={activeRecipe.title} />
-              <span>{activeRecipe.title}</span>
+      <div className="meal-table">
+        <div className="meal-table__header-day" />
+        {MEAL_TYPES.map(({ type, label }) => (
+          <div key={type} className={`meal-table__header-meal meal-table__header-meal--${type}`}>
+            {label}
+          </div>
+        ))}
+
+        {days.map((day) => (
+          <React.Fragment key={day.id}>
+            <div className="meal-table__day-cell">
+              <span className="meal-table__day-short">{day.short}</span>
+              <span className="meal-table__day-long">{day.label}</span>
             </div>
-          )}
-        </DragOverlay>
-      </DndContext>
+            {MEAL_TYPES.map(({ type }) => (
+              <div key={type} className={`meal-table__meal-cell meal-table__meal-cell--${type}`}>
+                {day.meals[type].map((recipe) => (
+                  <div key={recipe.id} className="meal-dish">
+                    <Link to={`/recipe/${recipe.id}`} className="meal-dish__link">
+                      <img src={recipe.image} alt="" />
+                      <div className="meal-dish__info">
+                        <div className="meal-dish__title">{recipe.title}</div>
+                        {recipe.readyInMinutes && (
+                          <div className="meal-dish__time">{recipe.readyInMinutes} мин</div>
+                        )}
+                      </div>
+                    </Link>
+                    <button
+                      className="meal-dish__remove"
+                      onClick={() => removeRecipe(day.id, type, recipe.id)}
+                      title="Удалить"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {day.meals[type].length === 0 && (
+                  <div className="meal-cell__empty">—</div>
+                )}
+              </div>
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
     </main>
   );
 }

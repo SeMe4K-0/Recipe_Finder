@@ -1,22 +1,35 @@
 import { useState, useCallback } from 'react';
-import { MealPlanDay, Recipe } from '../types';
+import { MealPlanDay, MealType, Recipe } from '../types';
 
-const STORAGE_KEY = 'mealPlan';
+const STORAGE_KEY = 'mealPlan_v2';
 
 const DEFAULT_DAYS: MealPlanDay[] = [
-  { id: 'mon', label: 'Понедельник', recipes: [] },
-  { id: 'tue', label: 'Вторник', recipes: [] },
-  { id: 'wed', label: 'Среда', recipes: [] },
-  { id: 'thu', label: 'Четверг', recipes: [] },
-  { id: 'fri', label: 'Пятница', recipes: [] },
-  { id: 'sat', label: 'Суббота', recipes: [] },
-  { id: 'sun', label: 'Воскресенье', recipes: [] },
+  { id: 'mon', label: 'Понедельник', short: 'Пн', meals: { breakfast: [], lunch: [], dinner: [] } },
+  { id: 'tue', label: 'Вторник',     short: 'Вт', meals: { breakfast: [], lunch: [], dinner: [] } },
+  { id: 'wed', label: 'Среда',       short: 'Ср', meals: { breakfast: [], lunch: [], dinner: [] } },
+  { id: 'thu', label: 'Четверг',     short: 'Чт', meals: { breakfast: [], lunch: [], dinner: [] } },
+  { id: 'fri', label: 'Пятница',     short: 'Пт', meals: { breakfast: [], lunch: [], dinner: [] } },
+  { id: 'sat', label: 'Суббота',     short: 'Сб', meals: { breakfast: [], lunch: [], dinner: [] } },
+  { id: 'sun', label: 'Воскресенье', short: 'Вс', meals: { breakfast: [], lunch: [], dinner: [] } },
 ];
 
 function load(): MealPlanDay[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_DAYS;
+    if (raw) return JSON.parse(raw);
+
+    // Migrate from old format { id, label, recipes: Recipe[] }
+    const oldRaw = localStorage.getItem('mealPlan');
+    if (oldRaw) {
+      const old: { id: string; label: string; recipes: Recipe[] }[] = JSON.parse(oldRaw);
+      return DEFAULT_DAYS.map((def, i) => {
+        const prev = old[i];
+        if (!prev) return def;
+        return { ...def, meals: { breakfast: [], lunch: [], dinner: prev.recipes ?? [] } };
+      });
+    }
+
+    return DEFAULT_DAYS;
   } catch {
     return DEFAULT_DAYS;
   }
@@ -29,50 +42,32 @@ function save(days: MealPlanDay[]) {
 export function useMealPlan() {
   const [days, setDays] = useState<MealPlanDay[]>(load);
 
-  const update = useCallback((next: MealPlanDay[]) => {
-    setDays(next);
-    save(next);
-  }, []);
-
-  const addRecipe = useCallback((dayId: string, recipe: Recipe) => {
+  const addRecipe = useCallback((dayId: string, mealType: MealType, recipe: Recipe) => {
     setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId && !d.recipes.find((r) => r.id === recipe.id)
-          ? { ...d, recipes: [...d.recipes, recipe] }
-          : d
-      );
-      save(next);
-      return next;
-    });
-  }, []);
-
-  const removeRecipe = useCallback((dayId: string, recipeId: number) => {
-    setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId
-          ? { ...d, recipes: d.recipes.filter((r) => r.id !== recipeId) }
-          : d
-      );
-      save(next);
-      return next;
-    });
-  }, []);
-
-  const moveRecipe = useCallback(
-    (fromDayId: string, toDayId: string, recipe: Recipe) => {
-      setDays((prev) => {
-        const next = prev.map((d) => {
-          if (d.id === fromDayId) return { ...d, recipes: d.recipes.filter((r) => r.id !== recipe.id) };
-          if (d.id === toDayId && !d.recipes.find((r) => r.id === recipe.id))
-            return { ...d, recipes: [...d.recipes, recipe] };
-          return d;
-        });
-        save(next);
-        return next;
+      const next = prev.map((d) => {
+        if (d.id !== dayId) return d;
+        const existing = d.meals[mealType];
+        if (existing.find((r) => r.id === recipe.id)) return d;
+        return { ...d, meals: { ...d.meals, [mealType]: [...existing, recipe] } };
       });
-    },
-    []
-  );
+      save(next);
+      return next;
+    });
+  }, []);
 
-  return { days, update, addRecipe, removeRecipe, moveRecipe };
+  const removeRecipe = useCallback((dayId: string, mealType: MealType, recipeId: number) => {
+    setDays((prev) => {
+      const next = prev.map((d) => {
+        if (d.id !== dayId) return d;
+        return {
+          ...d,
+          meals: { ...d.meals, [mealType]: d.meals[mealType].filter((r) => r.id !== recipeId) },
+        };
+      });
+      save(next);
+      return next;
+    });
+  }, []);
+
+  return { days, addRecipe, removeRecipe };
 }
