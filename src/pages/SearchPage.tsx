@@ -1,21 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRecipes } from '../hooks/useRecipes';
 import { useMealPlan } from '../hooks/useMealPlan';
 import { RecipeCard } from '../components/RecipeCard';
 import { Filters } from '../components/Filters';
-import { Pagination } from '../components/Pagination';
 import { AddToMealPlanModal } from '../components/AddToMealPlanModal';
 import { Recipe, MealType } from '../types';
 
+const HINTS = ['Паста карбонара', 'Борщ', 'Греческий салат', 'Пицца', 'Ризотто', 'Том Ям', 'Тирамису'];
+
 export function SearchPage() {
   const {
-    recipes, translatedTitles, totalResults, isLoading, error,
-    query, diets, cuisines, page,
-    setQuery, setDiets, setCuisines, setPage,
+    recipes, translatedTitles, totalResults,
+    isLoading, isLoadingMore, hasMore, error,
+    query, diets, cuisines,
+    setQuery, setDiets, setCuisines, loadMore,
   } = useRecipes();
 
   const { days, addRecipe } = useMealPlan();
   const [modalRecipe, setModalRecipe] = useState<Recipe | null>(null);
+
+  // Sentinel for infinite scroll
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) loadMore(); },
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   return (
     <>
@@ -46,6 +61,26 @@ export function SearchPage() {
           )}
         </div>
 
+        {/* Empty state hint — shown when no query entered */}
+        {!query && !isLoading && (
+          <div className="search-hint">
+            <svg className="search-hint__icon" viewBox="0 0 64 64" fill="none">
+              <circle cx="28" cy="28" r="18" stroke="currentColor" strokeWidth="3" opacity=".25"/>
+              <path d="M41 41l10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity=".25"/>
+              <path d="M21 28h14M28 21v14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" opacity=".4"/>
+            </svg>
+            <p className="search-hint__title">Найдите рецепт по-русски</p>
+            <p className="search-hint__sub">Введите название блюда или продукта — результаты переводятся автоматически</p>
+            <div className="search-hint__tags">
+              {HINTS.map((hint) => (
+                <button key={hint} className="search-hint__tag" onClick={() => setQuery(hint)}>
+                  {hint}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {isLoading && (
           <div className="recipe-grid">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -69,7 +104,7 @@ export function SearchPage() {
           </div>
         )}
 
-        {!isLoading && recipes.length > 0 && (
+        {recipes.length > 0 && (
           <>
             <div className="recipe-grid">
               {recipes.map((r) => (
@@ -83,7 +118,21 @@ export function SearchPage() {
                 />
               ))}
             </div>
-            <Pagination page={page} totalResults={totalResults} onPageChange={setPage} />
+
+            {/* Infinite scroll sentinel */}
+            {hasMore && <div ref={sentinelRef} className="scroll-sentinel" />}
+
+            {/* Loading more spinner */}
+            {isLoadingMore && (
+              <div className="load-more">
+                <div className="load-more__spinner" />
+              </div>
+            )}
+
+            {/* End of results */}
+            {!hasMore && !isLoading && (
+              <p className="load-more__end">Все {totalResults} рецептов загружены</p>
+            )}
           </>
         )}
       </main>
